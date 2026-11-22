@@ -429,6 +429,17 @@ namespace RealisticRespirationMod
                     "阿片/镇静药物正在压制延髓呼吸中枢对 CO2 的敏感性！可使用纳洛酮拮抗阿片或静注尼可刹米兴奋呼吸中枢。",
                     critical: tier >= 3, chippedOnly: false, important: true, key: "resp.centraldep", holdSeconds: 0.7f);
             }
+
+            // 6. Air-Hunger Suffocation Panic (conscious, excited medulla, actual RR << target RR)
+            if (s.AirHungerPanicIntensity > 0.30f && body.conscious)
+            {
+                int tier = s.AirHungerPanicIntensity > 0.65f ? 3 : 2;
+                MoodleRegistry.AddMoodle(tier,
+                    RespirationSprites.GetMoodleIcon("airhunger", new Color(1f, 0.32f, 0.28f), new Color(1f, 0.88f, 0.32f), 0),
+                    "窒息恐慌 (空气饥渴)",
+                    "延髓呼吸中枢剧烈兴奋却无法吸入足够空气！濒死窒息感正在引发强烈恐慌并持续累积心理创伤。",
+                    critical: tier >= 3, chippedOnly: false, important: true, key: "resp.airhunger", holdSeconds: 0.7f);
+            }
         }
 
         private static void RegisterConsoleCommands()

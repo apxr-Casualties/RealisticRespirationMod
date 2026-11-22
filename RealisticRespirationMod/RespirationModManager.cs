@@ -293,6 +293,24 @@ namespace RealisticRespirationMod
                 body.miscShakeIntensity = Mathf.Max(body.miscShakeIntensity, output.TremorShakeIntensity);
             }
 
+            // Air-hunger suffocation panic & psychological trauma (when conscious, medulla excited, actual RR << target RR)
+            if (output.AirHungerPanicIntensity > 0.08f && body.conscious)
+            {
+                if (body.horrifiedLevel < output.HorrifiedTargetLevel)
+                {
+                    body.horrifiedLevel = Mathf.MoveTowards(body.horrifiedLevel, output.HorrifiedTargetLevel, dt * 45f);
+                }
+                body.eyePanicTime = Mathf.Max(body.eyePanicTime, 0.45f);
+            }
+            if (output.TraumaDelta > 0.00001f)
+            {
+                body.traumaAmount = Mathf.Clamp(body.traumaAmount + output.TraumaDelta, 0f, 100f);
+            }
+            if (output.PanicAdrenalineDelta > 0.00001f)
+            {
+                body.adrenaline = Mathf.Clamp(body.adrenaline + output.PanicAdrenalineDelta, 0f, 100f);
+            }
+
             // Push PaCO2 / pH / Nikethamide feedback to NeurologyOverhaulMod if installed
             NeuroCompatBridge.PushFeedbackToNeuro(body, in output, dt);
         }

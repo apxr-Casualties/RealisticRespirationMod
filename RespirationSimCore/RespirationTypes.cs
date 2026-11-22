@@ -174,6 +174,10 @@ namespace RespirationSimCore
         public float ConsciousnessCap;           // 100 = no cap
         public float BrainHealthDelta;           // Direct acidemia brain injury per frame (already scaled by dt)
         public float TremorShakeIntensity;       // Alkalosis / Nikethamide toxicity tremor
+        public float AirHungerPanicIntensity;    // 0..1 when conscious, medulla excited, actual RR << target RR
+        public float HorrifiedTargetLevel;       // 0..100 vanilla body.horrifiedLevel target during air-hunger panic
+        public float TraumaDelta;                // Psychological trauma gained per frame (already scaled by dt)
+        public float PanicAdrenalineDelta;       // Panic adrenaline surge per frame (already scaled by dt)
 
         // Feedback to RealisticCardiacEcgMod (applied in HandleCirculation Prefix next frame)
         public float CardiacRvIschemiaAdd;       // 0..1 (PE / Pulmonary Failure right heart strain)
@@ -213,6 +217,7 @@ namespace RespirationSimCore
         public float BzdSuppressionFactor;       // 0..1
         public float NikethamideConc;
         public float BicarbonateInfusionPending;
+        public float AirHungerPanicIntensity;    // 0..1
 
         public PulmonaryFailureReason FailureReason;
         public bool IsPulmonaryFailure => FailureReason != PulmonaryFailureReason.None;

@@ -266,6 +266,53 @@ namespace RespirationSimVerifier
                     $"After 195s @ dt=0.65s: RR={s.ActualRpm:0.0}/m PaCO2={s.PaCO2MmHg:0.0} pH={s.BloodPh:0.00}");
             }
 
+            // 11. Apnea SpO2 100% -> 50% duration (must be 60s - 120s) + proportionate recovery
+            {
+                var sim = new BodyRespirationSimulator(11);
+                var env = NormalEnv();
+                env.HeadTourniquetOccluded = true; // Complete apnea at resting metabolism
+                float elapsed = 0f;
+                while (elapsed < 180f && sim.LastTelemetry.SpO2Percent > 50f)
+                {
+                    sim.Step(0.25f, in env, in cfg);
+                    elapsed += 0.25f;
+                }
+                float timeTo50 = elapsed;
+
+                // Release airway and measure recovery over 25s
+                env.HeadTourniquetOccluded = false;
+                StepSeconds(sim, in env, in cfg, 25f);
+                float recoveredSpo2 = sim.LastTelemetry.SpO2Percent;
+
+                Assert("Apnea SpO2 100%->50% Takes 60-120s + Proportionate Recovery",
+                    timeTo50 >= 60f && timeTo50 <= 120f && recoveredSpo2 >= 90f,
+                    $"TimeTo50%={timeTo50:0.0}s (target 60-120s) | 25s Post-Release SpO2={recoveredSpo2:0.0}%");
+            }
+
+            // 12. Air-Hunger Suffocation Panic & Trauma (conscious excited medulla with ActualRpm << TargetRpm)
+            {
+                var sim = new BodyRespirationSimulator(12);
+                var env = NormalEnv();
+                env.Hemothorax = 90f; // Pulmonary failure: ActualRpm=0 while medulla excites strongly!
+                float totalTrauma = 0f;
+                float peakHorrified = 0f;
+                for (int i = 0; i < 40; i++)
+                {
+                    var o = sim.Step(0.5f, in env, in cfg);
+                    totalTrauma += o.TraumaDelta;
+                    if (o.HorrifiedTargetLevel > peakHorrified) peakHorrified = o.HorrifiedTargetLevel;
+                }
+
+                // Unconscious should NOT experience panic/trauma
+                env.Conscious = false;
+                StepSeconds(sim, in env, in cfg, 8f);
+                var uncOut = sim.LastOutput;
+
+                Assert("Air-Hunger Panic & Trauma (Conscious Only)",
+                    peakHorrified >= 55f && totalTrauma > 6f && uncOut.HorrifiedTargetLevel <= 0.1f && uncOut.TraumaDelta <= 0.0001f,
+                    $"Conscious 20s: PeakHorrified={peakHorrified:0.0} TraumaGain=+{totalTrauma:0.0} | Unconscious: Horrified={uncOut.HorrifiedTargetLevel:0.0} TraumaDelta={uncOut.TraumaDelta:0.00}");
+            }
+
             Console.WriteLine($"\nSummary: {_passed} passed, {_failed} failed.");
             return _failed == 0 ? 0 : 1;
         }

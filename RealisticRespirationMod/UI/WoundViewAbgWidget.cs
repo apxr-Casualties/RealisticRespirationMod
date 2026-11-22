@@ -170,7 +170,8 @@ namespace RealisticRespirationMod.UI
                 rt.pivot = new Vector2(0f, 0.5f);
                 float rightEdgeX = oxyRt.anchoredPosition.x + (1f - oxyRt.pivot.x) * oxyRt.rect.width;
                 float centerY = oxyRt.anchoredPosition.y + (0.5f - oxyRt.pivot.y) * oxyRt.rect.height;
-                rt.anchoredPosition = new Vector2(rightEdgeX + 6f, centerY);
+                // Offset right past the vanilla oxygen icon and monitor border so it aligns cleanly with ECG's lead switch button
+                rt.anchoredPosition = new Vector2(rightEdgeX + 34f, centerY);
             }
             else
             {

@@ -17,6 +17,7 @@ namespace RespirationSimCore
 
         private const int HistoryCapacity = 180; // 180 samples @ 1 Hz = 3 min rolling ABG trend
         private const float MaxSubStepSec = 0.05f;
+        private const float O2KineticsScale = 0.28f; // Proportionately scales PaO2 fall & rise so resting apnea SpO2 100%->50% takes ~1.5 min
 
         // Core blood gas & acid-base state
         public float PaCO2MmHg = RestingPaCO2;
@@ -38,6 +39,7 @@ namespace RespirationSimCore
         public PulmonaryFailureReason FailureReason = PulmonaryFailureReason.None;
         public float SustainedPeSeconds;
         public float AcuteApneaTimerSec;
+        public float AirHungerPanicIntensity;
         public float SimElapsedTimeSec;
 
         // Sub-modules
@@ -85,6 +87,7 @@ namespace RespirationSimCore
             FailureReason = PulmonaryFailureReason.None;
             SustainedPeSeconds = 0f;
             AcuteApneaTimerSec = 0f;
+            AirHungerPanicIntensity = 0f;
             _pvcCooldownSec = 0f;
 
             if (clearDrugs) Drugs.ClearAll();
@@ -156,6 +159,8 @@ namespace RespirationSimCore
 
             float accumBrainDelta = 0f;
             float accumIcpDelta = 0f;
+            float accumTraumaDelta = 0f;
+            float accumAdrenDelta = 0f;
             bool anyPvcRequest = false;
             RespirationStepOutput stepOut = default;
 
@@ -164,11 +169,15 @@ namespace RespirationSimCore
                 stepOut = StepSingle(subDt, in env, in config);
                 accumBrainDelta += stepOut.BrainHealthDelta;
                 accumIcpDelta += stepOut.NeuroIcpDelta;
+                accumTraumaDelta += stepOut.TraumaDelta;
+                accumAdrenDelta += stepOut.PanicAdrenalineDelta;
                 if (stepOut.RequestCardiacPvc) anyPvcRequest = true;
             }
 
             stepOut.BrainHealthDelta = accumBrainDelta;
             stepOut.NeuroIcpDelta = accumIcpDelta;
+            stepOut.TraumaDelta = accumTraumaDelta;
+            stepOut.PanicAdrenalineDelta = accumAdrenDelta;
             stepOut.RequestCardiacPvc = anyPvcRequest;
 
             LastOutput = stepOut;
@@ -624,17 +633,48 @@ namespace RespirationSimCore
                 float o2Rate = targetPaO2 > PaO2MmHg
                     ? (0.12f + 0.14f * Math.Min(2.0f, effectiveVaRatio))
                     : (0.08f + 0.05f * vco2);
-                PaO2MmHg = RespMath.Lerp(PaO2MmHg, targetPaO2, Math.Min(1f, dt * o2Rate * rateMult));
+                PaO2MmHg = RespMath.Lerp(PaO2MmHg, targetPaO2, Math.Min(1f, dt * o2Rate * O2KineticsScale * rateMult));
             }
             else
             {
                 // Complete apnea / underwater / pulmonary failure: oxygen stores consumed proportionally to metabolic demand
-                float o2DecayPerSec = (1.65f + 1.10f * vco2) * rateMult;
+                float o2DecayPerSec = (1.65f + 1.10f * vco2) * O2KineticsScale * rateMult;
                 PaO2MmHg = RespMath.MoveTowards(PaO2MmHg, 12f, dt * o2DecayPerSec);
             }
             PaO2MmHg = RespMath.Clamp(PaO2MmHg, 10f, 125f);
 
             float spO2 = ComputeSpO2FromPaO2(PaO2MmHg, BloodPh, env.TemperatureC);
+
+            // 8d. Air-Hunger Suffocation Panic & Trauma:
+            // Triggers when conscious, medulla is excited (> 1.25), AND actual RR is far below medullary target RR
+            // (e.g. pulmonary failure, airway occlusion, respiratory muscle lock)
+            float rpmDeficit = MedullaryTargetRpm - CurrentRpm;
+            bool airHungerTriggered =
+                env.Conscious &&
+                MedullaryExcitability > 1.25f &&
+                MedullaryTargetRpm >= 18f &&
+                rpmDeficit >= 10f &&
+                CurrentRpm <= MedullaryTargetRpm * 0.55f;
+
+            if (airHungerTriggered)
+            {
+                float deficitSev = RespMath.Clamp01((rpmDeficit - 8f) / 35f);
+                float excitSev = RespMath.Clamp01((MedullaryExcitability - 1.25f) / 1.75f);
+                float targetPanic = RespMath.Clamp01(0.35f + 0.65f * Math.Max(deficitSev, excitSev));
+                AirHungerPanicIntensity = RespMath.MoveTowards(AirHungerPanicIntensity, targetPanic, dt * 0.32f);
+            }
+            else
+            {
+                AirHungerPanicIntensity = RespMath.MoveTowards(AirHungerPanicIntensity, 0f, dt * 0.45f);
+            }
+
+            if (AirHungerPanicIntensity > 0.08f && env.Conscious)
+            {
+                output.AirHungerPanicIntensity = AirHungerPanicIntensity;
+                output.HorrifiedTargetLevel = RespMath.Clamp(25f + AirHungerPanicIntensity * 65f, 0f, 90f);
+                output.TraumaDelta += AirHungerPanicIntensity * 0.85f * dt;
+                output.PanicAdrenalineDelta += AirHungerPanicIntensity * 6.5f * dt;
+            }
 
             // 9. Systemic & Tri-Mod Physiological Effects (pH, PaCO2, Nikethamide, PE)
             if (config.EnableAcidBaseSystemicEffects)
@@ -868,6 +908,7 @@ namespace RespirationSimCore
                 BzdSuppressionFactor = bzdSupp,
                 NikethamideConc = Drugs.NikethamideConc,
                 BicarbonateInfusionPending = Drugs.BicarbonateDepotMmolL,
+                AirHungerPanicIntensity = AirHungerPanicIntensity,
 
                 FailureReason = FailureReason,
                 AcidBase = ClassifyAcidBase()
