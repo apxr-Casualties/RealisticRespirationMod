@@ -1,0 +1,17 @@
+# Build outputs & IDE files
+**/bin/
+**/obj/
+*.user
+*.suo
+*.cache
+.vs/
+.vscode/
+.idea/
+Directory.Build.props
+
+# Local logs & binaries
+*.log
+*.dll
+*.exe
+*.pdb
+*.mdb
