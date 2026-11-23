@@ -1,0 +1,26 @@
+name: Verify RespirationSimCore
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build RespirationSimCore
+        run: dotnet build RespirationSimCore/RespirationSimCore.csproj -c Release
+
+      - name: Run Physiological Verifier (12 Scenarios)
+        run: dotnet run --project RespirationSimVerifier/RespirationSimVerifier.csproj -c Release

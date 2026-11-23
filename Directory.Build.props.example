@@ -1,0 +1,8 @@
+<!-- Copy this file to Directory.Build.props and set paths to your local Casualties Unknown installation -->
+<Project>
+  <PropertyGroup>
+    <BepInExCoreDir>C:\Program Files (x86)\Steam\steamapps\common\Casualties Unknown\BepInEx\core</BepInExCoreDir>
+    <GameManagedDir>C:\Program Files (x86)\Steam\steamapps\common\Casualties Unknown\CasualtiesUnknown_Data\Managed</GameManagedDir>
+    <CUCoreLibDllPath>C:\Program Files (x86)\Steam\steamapps\common\Casualties Unknown\BepInEx\plugins\CUCoreLib.dll</CUCoreLibDllPath>
+  </PropertyGroup>
+</Project>
