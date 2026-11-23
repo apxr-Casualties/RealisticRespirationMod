@@ -14,7 +14,7 @@ namespace RealisticRespirationMod
     {
         public const string PluginGuid = "com.casualties.realistic.respiration";
         public const string PluginName = "Realistic Respiration & Blood Gas Mod";
-        public const string PluginVersion = "1.0.1";
+        public const string PluginVersion = "1.0.2";
         public const string CardiacModGuid = "com.casualties.realistic.ecg";
         public const string NeuroModGuid = "com.casualties.neurology.overhaul";
 

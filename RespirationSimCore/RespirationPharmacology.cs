@@ -99,10 +99,10 @@ namespace RespirationSimCore
                 NikethamideConc = 0f;
             }
 
-            // 2. Sodium Bicarbonate infusion absorption & CO2 liberation
+            // 2. Sodium Bicarbonate infusion absorption & CO2 liberation (scaled to match V1.0.2 blood gas kinetics so intact ventilation exhales liberated CO2 smoothly)
             if (BicarbonateDepotMmolL > 0.001f)
             {
-                float absorbedHco3 = BicarbonateDepotMmolL * (1f - (float)Math.Exp(-0.22f * dt));
+                float absorbedHco3 = BicarbonateDepotMmolL * (1f - (float)Math.Exp(-0.065f * dt));
                 BicarbonateDepotMmolL -= absorbedHco3;
                 hco3GainMmolL = absorbedHco3;
 

@@ -17,7 +17,7 @@ namespace RespirationSimCore
 
         private const int HistoryCapacity = 180; // 180 samples @ 1 Hz = 3 min rolling ABG trend
         private const float MaxSubStepSec = 0.05f;
-        private const float O2KineticsScale = 0.28f; // Proportionately scales PaO2 fall & rise so resting apnea SpO2 100%->50% takes ~1.5 min
+        private const float BloodGasKineticsScale = 0.28f; // Unified V1.0.2 scale for PaO2, PaCO2, and HCO3- kinetics (~1.5 min apnea SpO2 100%->50%)
 
         // Core blood gas & acid-base state
         public float PaCO2MmHg = RestingPaCO2;
@@ -580,7 +580,7 @@ namespace RespirationSimCore
 
             // 8a. PaCO2 ODE: dPaCO2/dt = k * (40 * VCO2 - VA * PaCO2) + bicarbonate CO2 release
             const float kCo2 = 0.032f;
-            float dPaCO2 = kCo2 * rateMult * (RestingPaCO2 * vco2 - effectiveVaRatio * PaCO2MmHg) * dt;
+            float dPaCO2 = kCo2 * BloodGasKineticsScale * rateMult * (RestingPaCO2 * vco2 - effectiveVaRatio * PaCO2MmHg) * dt;
             PaCO2MmHg = RespMath.Clamp(PaCO2MmHg + dPaCO2 + bicarbCo2ReleaseMmHg, 12f, 150f);
 
             // 8b. Metabolic HCO3- dynamics (lactic acidosis vs clearance & renal compensation + NaHCO3 infusion)
@@ -607,7 +607,7 @@ namespace RespirationSimCore
             float targetRenalHco3 = RespMath.Clamp(RestingBicarbonate + (PaCO2MmHg - RestingPaCO2) * 0.12f, 16f, 34f);
             float clearanceRate = (PerfusionEff > 0.65f && PaO2MmHg > 60f) ? 0.0085f : 0.0020f;
 
-            float dHco3 = (-lactateAcidLoad + (targetRenalHco3 - BicarbonateMmolL) * clearanceRate) * dt + bicarbGainMmolL;
+            float dHco3 = (-lactateAcidLoad + (targetRenalHco3 - BicarbonateMmolL) * clearanceRate) * BloodGasKineticsScale * rateMult * dt + bicarbGainMmolL;
             BicarbonateMmolL = RespMath.Clamp(BicarbonateMmolL + dHco3, 6f, 48f);
 
             // Recompute arterial pH & Base Excess via Henderson-Hasselbalch
@@ -633,12 +633,12 @@ namespace RespirationSimCore
                 float o2Rate = targetPaO2 > PaO2MmHg
                     ? (0.12f + 0.14f * Math.Min(2.0f, effectiveVaRatio))
                     : (0.08f + 0.05f * vco2);
-                PaO2MmHg = RespMath.Lerp(PaO2MmHg, targetPaO2, Math.Min(1f, dt * o2Rate * O2KineticsScale * rateMult));
+                PaO2MmHg = RespMath.Lerp(PaO2MmHg, targetPaO2, Math.Min(1f, dt * o2Rate * BloodGasKineticsScale * rateMult));
             }
             else
             {
                 // Complete apnea / underwater / pulmonary failure: oxygen stores consumed proportionally to metabolic demand
-                float o2DecayPerSec = (1.65f + 1.10f * vco2) * O2KineticsScale * rateMult;
+                float o2DecayPerSec = (1.65f + 1.10f * vco2) * BloodGasKineticsScale * rateMult;
                 PaO2MmHg = RespMath.MoveTowards(PaO2MmHg, 12f, dt * o2DecayPerSec);
             }
             PaO2MmHg = RespMath.Clamp(PaO2MmHg, 10f, 125f);

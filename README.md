@@ -1,4 +1,4 @@
-# Realistic Respiration & Blood Gas Mod (V1.0.0)
+# Realistic Respiration & Blood Gas Mod (V1.0.2)
 
 为 *Casualties Unknown* 打造的呼吸系统、动脉血气（$PaO_2$ / $PaCO_2$ / $\text{pH}$ / $[\text{HCO}_3^-]$）与延髓呼吸中枢大修 Mod（硬依赖 **CUCoreLib**，零编译双向软兼容 **RealisticCardiacEcgMod** 与 **NeurologyOverhaulMod**）。
 

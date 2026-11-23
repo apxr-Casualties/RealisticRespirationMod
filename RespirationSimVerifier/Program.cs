@@ -87,19 +87,19 @@ namespace RespirationSimVerifier
                 var sim = new BodyRespirationSimulator(3);
                 var env = NormalEnv();
                 env.OpiateReception = 82f; // Heavy fentanyl/morphine OD
-                StepSeconds(sim, in env, in cfg, 35f);
+                StepSeconds(sim, in env, in cfg, 75f);
                 var od = sim.LastTelemetry;
-                bool suppressed = od.ActualRpm < 3.5f && od.PaCO2MmHg > 60f && od.BloodPh < 7.28f;
+                bool suppressed = od.ActualRpm < 3.5f && od.PaCO2MmHg > 60f && od.BloodPh < 7.25f;
 
                 // Naloxone clears opiates
                 env.OpiateReception = 0f;
-                StepSeconds(sim, in env, in cfg, 8f);
+                StepSeconds(sim, in env, in cfg, 10f);
                 var rebound = sim.LastTelemetry;
                 bool rebounded = rebound.ActualRpm > 30f && rebound.MedullaryExcitability > 2.2f;
 
                 Assert("Opiate Arrest + Naloxone Rebound",
                     suppressed && rebounded,
-                    $"OD: RR={od.ActualRpm:0.0}/m PaCO2={od.PaCO2MmHg:0.0} pH={od.BloodPh:0.00} | Post-Naloxone: RR={rebound.ActualRpm:0.0}/m Excit={rebound.MedullaryExcitability:0.00}");
+                    $"OD(75s): RR={od.ActualRpm:0.0}/m PaCO2={od.PaCO2MmHg:0.0} pH={od.BloodPh:0.00} | Post-Naloxone: RR={rebound.ActualRpm:0.0}/m Excit={rebound.MedullaryExcitability:0.00}");
             }
 
             // 4. Nikethamide rescues moderate-heavy opiate depression via medullary excitation
@@ -123,7 +123,7 @@ namespace RespirationSimVerifier
                 var sim = new BodyRespirationSimulator(5);
                 var env = NormalEnv();
                 env.Hemothorax = 88f;
-                StepSeconds(sim, in env, in cfg, 22f);
+                StepSeconds(sim, in env, in cfg, 60f);
                 var fail = sim.LastTelemetry;
                 bool failedProperly = fail.IsPulmonaryFailure &&
                                       fail.ActualRpm <= 0.01f &&
@@ -138,13 +138,13 @@ namespace RespirationSimVerifier
 
                 // Chest drain relieves hemothorax below hysteresis threshold (< 80%)
                 env.Hemothorax = 50f;
-                StepSeconds(sim, in env, in cfg, 8f);
+                StepSeconds(sim, in env, in cfg, 10f);
                 var recovered = sim.LastTelemetry;
                 bool resumed = !recovered.IsPulmonaryFailure && recovered.Breathing && recovered.ActualRpm > 25f;
 
                 Assert("Pulmonary Failure (Hemothorax) + ChestDrain Recovery",
                     failedProperly && stillBlocked && resumed,
-                    $"Fail: RR={fail.ActualRpm:0.0} MedExcit={fail.MedullaryExcitability:0.00} PaCO2={fail.PaCO2MmHg:0.0} | PostDrain: RR={recovered.ActualRpm:0.0}/m");
+                    $"Fail(60s): RR={fail.ActualRpm:0.0} MedExcit={fail.MedullaryExcitability:0.00} PaCO2={fail.PaCO2MmHg:0.0} | PostDrain: RR={recovered.ActualRpm:0.0}/m");
             }
 
             // 6. Metabolic Acidosis Kussmaul Compensation + Sodium Bicarbonate (good vent vs lung failure trap)
@@ -153,34 +153,41 @@ namespace RespirationSimVerifier
                 var env = NormalEnv();
                 sim.AddBicarbonateDelta(-12f); // HCO3- = 12 mmol/L -> severe metabolic acidosis
                 float peakKussmaulRr = 0f;
-                for (int k = 0; k < 30; k++)
+                for (int k = 0; k < 60; k++)
                 {
                     StepSeconds(sim, in env, in cfg, 0.5f);
                     if (sim.LastTelemetry.ActualRpm > peakKussmaulRr)
                         peakKussmaulRr = sim.LastTelemetry.ActualRpm;
                 }
                 var acid = sim.LastTelemetry;
-                bool kussmaul = peakKussmaulRr > 26f && acid.PaCO2MmHg < 30f;
+                bool kussmaul = peakKussmaulRr > 26f && acid.PaCO2MmHg < 32f;
 
-                // NaHCO3 with intact ventilation raises pH back toward normal without trapping CO2
+                // NaHCO3 with intact ventilation smoothly raises pH without paradoxical pH dip
                 sim.Drugs.Administer(RespirationDrugId.SodiumBicarbonate, 20f, RespirationAdminRoute.Injectable);
-                StepSeconds(sim, in env, in cfg, 25f);
+                float minPhDuringInfusion = acid.BloodPh;
+                for (int k = 0; k < 120; k++)
+                {
+                    StepSeconds(sim, in env, in cfg, 0.5f);
+                    if (sim.LastTelemetry.BloodPh < minPhDuringInfusion)
+                        minPhDuringInfusion = sim.LastTelemetry.BloodPh;
+                }
                 var postBicarb = sim.LastTelemetry;
-                bool corrected = postBicarb.BloodPh >= 7.35f && postBicarb.BloodPh > acid.BloodPh + 0.05f && postBicarb.BicarbonateMmolL > acid.BicarbonateMmolL + 3f;
+                bool noParadoxDip = minPhDuringInfusion >= acid.BloodPh - 0.02f;
+                bool corrected = noParadoxDip && postBicarb.BloodPh >= 7.35f && postBicarb.BloodPh > acid.BloodPh + 0.05f && postBicarb.BicarbonateMmolL > acid.BicarbonateMmolL + 3f;
 
                 // NaHCO3 during pulmonary failure traps released CO2 -> PaCO2 surges!
                 var simFail = new BodyRespirationSimulator(61);
                 var envFail = NormalEnv();
                 envFail.ThoraxMuscleHealth = 2f; // Thorax destroyed -> pulmonary failure
-                StepSeconds(simFail, in envFail, in cfg, 10f);
+                StepSeconds(simFail, in envFail, in cfg, 15f);
                 float co2Before = simFail.PaCO2MmHg;
                 simFail.Drugs.Administer(RespirationDrugId.SodiumBicarbonate, 25f, RespirationAdminRoute.Injectable);
-                StepSeconds(simFail, in envFail, in cfg, 15f);
+                StepSeconds(simFail, in envFail, in cfg, 45f);
                 float co2After = simFail.PaCO2MmHg;
 
                 Assert("Metabolic Acidosis Kussmaul + NaHCO3 Good vs Lung-Failure Trap",
                     kussmaul && corrected && (co2After > co2Before + 25f),
-                    $"Kussmaul PeakRR={peakKussmaulRr:0.0}/m PaCO2={acid.PaCO2MmHg:0.0} pH={acid.BloodPh:0.00} -> PostNaHCO3 pH={postBicarb.BloodPh:0.00} | LungFail NaHCO3 PaCO2: {co2Before:0.0}->{co2After:0.0}");
+                    $"Kussmaul PeakRR={peakKussmaulRr:0.0}/m PaCO2={acid.PaCO2MmHg:0.0} pH={acid.BloodPh:0.00} -> PostNaHCO3(60s) pH={postBicarb.BloodPh:0.00} (minPh={minPhDuringInfusion:0.00}) | LungFail NaHCO3 PaCO2: {co2Before:0.0}->{co2After:0.0}");
             }
 
             // 7. External Excitability Modifier API (multi-source stacking + timed expiration)
@@ -197,7 +204,7 @@ namespace RespirationSimVerifier
                 bool stimExpired = sim.Modifiers.ActiveExcitabilityModifierCount == 1;
 
                 sim.Modifiers.RemoveExcitabilityModifier("mod.boost");
-                StepSeconds(sim, in env, in cfg, 25f);
+                StepSeconds(sim, in env, in cfg, 80f);
                 float normalRr = sim.LastTelemetry.ActualRpm;
 
                 Assert("External Medullary Excitability API (Stack + Auto-Expire)",
@@ -205,22 +212,26 @@ namespace RespirationSimVerifier
                     $"Boosted={boostedRr:0.0}/m -> PostExpire={afterExpireRr:0.0}/m -> Normal={normalRr:0.0}/m");
             }
 
-            // 8. Soft-compat Neuro: GTCS Tonic Apnea -> Postictal Hyperventilation + BZD+Opiate Synergy
+            // 8. Soft-compat Neuro: GTCS Tonic+Clonic -> Postictal Hyperventilation Rebound
             {
                 var sim = new BodyRespirationSimulator(8);
                 var env = NormalEnv();
                 env.NeuroModPresent = true;
-                env.NeuroSeizurePhase = 3; // Tonic apnea + huge VCO2
+                env.NeuroSeizurePhase = 3; // Tonic apnea + high VCO2 (16s realistic tonic phase)
                 StepSeconds(sim, in env, in cfg, 16f);
                 var tonic = sim.LastTelemetry;
 
-                env.NeuroSeizurePhase = 5; // Postictal: muscles relax, high CO2 fires medulla!
+                env.NeuroSeizurePhase = 4; // Clonic impaired breathing + high VCO2 (24s realistic clonic phase)
+                StepSeconds(sim, in env, in cfg, 24f);
+                float endIctalCo2 = sim.LastTelemetry.PaCO2MmHg;
+
+                env.NeuroSeizurePhase = 5; // Postictal: muscles relax, accumulated CO2 fires medulla!
                 StepSeconds(sim, in env, in cfg, 8f);
                 var postictal = sim.LastTelemetry;
 
-                Assert("Neuro Compat: GTCS Tonic Apnea -> Postictal Rebound",
-                    tonic.ActualRpm < 1f && tonic.PaCO2MmHg > 62f && postictal.ActualRpm > 32f,
-                    $"Tonic: RR={tonic.ActualRpm:0.0} PaCO2={tonic.PaCO2MmHg:0.0} | Postictal: RR={postictal.ActualRpm:0.0}/m");
+                Assert("Neuro Compat: GTCS Tonic+Clonic -> Postictal Rebound",
+                    tonic.ActualRpm < 1f && tonic.PaCO2MmHg > 50f && endIctalCo2 > 58f && postictal.ActualRpm > 32f,
+                    $"Tonic(16s): RR={tonic.ActualRpm:0.0} PaCO2={tonic.PaCO2MmHg:0.0} | EndClonic PaCO2={endIctalCo2:0.0} | Postictal: RR={postictal.ActualRpm:0.0}/m");
             }
 
             // 9. Soft-compat Cardiac: VF Arrest without vs with AutoPump + PE Right Ventricular Ischemia
